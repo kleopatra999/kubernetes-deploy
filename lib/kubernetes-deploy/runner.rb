@@ -257,12 +257,12 @@ module KubernetesDeploy
       Template content:
       ---
       INFO
-      debug_msg << rendered_content
+      debug_msg += rendered_content
       @logger.summary.add_paragraph(debug_msg)
       raise FatalDeploymentError, "Template '#{filename}' cannot be parsed"
     end
 
-    def raise_apply_failure(command, err)
+    def record_apply_failure(err)
       file_name, file_content = find_bad_file_from_kubectl_output(err)
       if file_name
         debug_msg = <<-HELPFUL_MESSAGE.strip_heredoc
@@ -283,7 +283,6 @@ module KubernetesDeploy
       end
 
       @logger.summary.add_paragraph(debug_msg)
-      raise FatalDeploymentError, "Command failed: #{Shellwords.join(command)}"
     end
 
     def wait_for_completion(watched_resources)
@@ -395,9 +394,10 @@ module KubernetesDeploy
         versioned_prune_whitelist.each { |type| command.push("--prune-whitelist=#{type}") }
       end
 
-      _, err, st = kubectl.run(*command, log_failure: false)
+      out, err, st = kubectl.run(*command, log_failure: false)
       unless st.success?
-        raise_apply_failure(command, err)
+        record_apply_failure(err)
+        raise FatalDeploymentError, "Command failed: #{Shellwords.join(command)}"
       end
     end
 

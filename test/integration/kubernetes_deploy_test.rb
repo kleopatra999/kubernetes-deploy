@@ -20,7 +20,7 @@ class KubernetesDeployTest < KubernetesDeploy::IntegrationTest
     hello_cloud.assert_all_up
   end
 
-  def test_pruning
+  def test_pruning_works
     assert deploy_fixtures("hello-cloud")
     hello_cloud = FixtureSetAssertions::HelloCloud.new(@namespace)
     hello_cloud.assert_all_up

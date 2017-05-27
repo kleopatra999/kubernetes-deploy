@@ -112,10 +112,6 @@ module KubernetesDeploy
       tpr? ? :replace : :apply
     end
 
-    def group_name
-      type.downcase.pluralize
-    end
-
     def debug_message
       helpful_info = []
       if deploy_failed?

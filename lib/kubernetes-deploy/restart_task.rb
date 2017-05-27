@@ -33,6 +33,7 @@ module KubernetesDeploy
     end
 
     def perform(deployments_names = nil)
+      @logger.reset
       verify_namespace
 
       if deployments_names

@@ -31,6 +31,7 @@ module KubernetesDeploy
     end
 
     def run!(task_template:, entrypoint:, args:, env_vars: [])
+      @logger.reset
       @logger.phase_heading("Validating configuration")
       validate_configuration(task_template, args)
 
