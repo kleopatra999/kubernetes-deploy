@@ -16,7 +16,11 @@ module KubernetesDeploy
     end
 
     def deploy_succeeded?
-      @num_endpoints > 0
+      if related_deployment_replicas
+        @num_endpoints == related_deployment_replicas
+      else
+        @num_endpoints > 0
+      end
     end
 
     def deploy_failed?
@@ -32,6 +36,18 @@ module KubernetesDeploy
 
     def exists?
       @found
+    end
+
+    private
+
+    def related_deployment_replicas
+      selector = template["spec"]["selector"].map { |k, v| "#{k}=#{v}" }.join(",")
+      raw_json, _err, st = kubectl.run("get", "deployments", "--selector=#{selector}", "--output=json")
+      return unless st.success?
+      deployments = JSON.parse(raw_json)["items"]
+      return unless deployments.length == 1
+      related_deployment = deployments.first
+      related_deployment["spec"]["replicas"].to_i
     end
   end
 end

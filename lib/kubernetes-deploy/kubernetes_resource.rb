@@ -35,6 +35,7 @@ module KubernetesDeploy
       when 'service' then Service
       when 'podtemplate' then PodTemplate
       when 'poddisruptionbudget' then PodDisruptionBudget
+      when 'replicaset' then ReplicaSet
       end
 
       opts = { name: name, namespace: namespace, context: context, file: file, logger: logger }
@@ -191,6 +192,11 @@ module KubernetesDeploy
 
     def kubectl
       @kubectl ||= Kubectl.new(namespace: @namespace, context: @context, logger: @logger, log_failure_by_default: false)
+    end
+
+    def template
+      return unless file.present?
+      @template ||= YAML.load_file(file)
     end
   end
 end

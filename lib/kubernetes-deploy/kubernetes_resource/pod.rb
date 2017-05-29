@@ -14,13 +14,13 @@ module KubernetesDeploy
     end
 
     def sync
-      out, _err, st = kubectl.run("get", type, @name, "-a", "--output=json")
+      raw_json, _err, st = kubectl.run("get", type, @name, "-a", "--output=json")
       if @found = st.success?
-        pod_data = JSON.parse(out)
+        pod_data = JSON.parse(raw_json)
         interpret_json_data(pod_data)
       else # reset
         @status = @phase = nil
-        @ready = false
+        @ready = @found = false
         @containers = []
       end
       display_logs if unmanaged? && deploy_succeeded?
@@ -73,7 +73,6 @@ module KubernetesDeploy
     # }
     def fetch_logs
       return {} unless exists? && @containers.present?
-
       @containers.each_with_object({}) do |container_name, container_logs|
         cmd = [
           "logs",

@@ -47,16 +47,15 @@ class ResourceWatcherTest < KubernetesDeploy::TestCase
     watcher = KubernetesDeploy::ResourceWatcher.new([first, second, third, fourth], logger: logger)
     watcher.run(delay_sync: 0.1)
 
-    @logger_stream.rewind
-    scanner = StringScanner.new(@logger_stream.read)
-
-    assert scanner.scan_until(/Successfully deployed in \d.\ds: first/)
-    assert scanner.scan_until(/Continuing to wait for: second, third, fourth/)
-    assert scanner.scan_until(/second deployment timed out/)
-    assert scanner.scan_until(/Continuing to wait for: third, fourth/)
-    assert scanner.scan_until(/third failed to deploy after \d.\ds/)
-    assert scanner.scan_until(/Continuing to wait for: fourth/)
-    assert scanner.scan_until(/Successfully deployed in \d.\ds: fourth/)
+    assert_logs_match_all([
+      /Successfully deployed in \d.\ds: first/,
+      /Continuing to wait for: second, third, fourth/,
+      /second deployment timed out/,
+      /Continuing to wait for: third, fourth/,
+      /third failed to deploy after \d.\ds/,
+      /Continuing to wait for: fourth/,
+      /Successfully deployed in \d.\ds: fourth/
+    ], in_order: true)
   end
 
   private
