@@ -299,7 +299,8 @@ class KubernetesDeployTest < KubernetesDeploy::IntegrationTest
 
   def test_all_failures_and_timeouts_in_primary_deploy_step_are_reported
     KubernetesDeploy::Service.any_instance.stubs(:deploy_failed?).returns(true)
-    KubernetesDeploy::Deployment.any_instance.stubs(:timeout).returns(1)
+    deployment_timeout = 5
+    KubernetesDeploy::Deployment.any_instance.stubs(:timeout).returns(deployment_timeout)
 
     success = deploy_fixtures("hello-cloud", subset: ["redis.yml", "web.yml.erb", "configmap-data.yml"]) do |fixtures|
       fixtures["redis.yml"].delete("Deployment") # Service will never come up
@@ -311,7 +312,7 @@ class KubernetesDeployTest < KubernetesDeploy::IntegrationTest
 
     assert_logs_match("Service/redis: FAILED")
     assert_logs_match("Service/web: FAILED")
-    assert_logs_match("Deployment/web: TIMED OUT (limit: 1s)")
+    assert_logs_match("Deployment/web: TIMED OUT (limit: #{deployment_timeout}s)")
     assert_logs_match("ScalingReplicaSet") # web deployment event
     assert_logs_match("nginx: [error]") # web deployment logs
   end

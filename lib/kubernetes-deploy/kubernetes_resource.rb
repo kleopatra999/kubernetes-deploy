@@ -34,6 +34,7 @@ module KubernetesDeploy
       when 'service' then Service
       when 'podtemplate' then PodTemplate
       when 'poddisruptionbudget' then PodDisruptionBudget
+      when 'replicaset' then ReplicaSet
       end
 
       opts = { name: name, namespace: namespace, context: context, file: file, logger: logger }

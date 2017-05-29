@@ -15,18 +15,19 @@ module KubernetesDeploy
 
     def sync
       out, _err, st = kubectl.run("get", type, @name, "-a", "--output=json")
-      if @found = st.success?
+      if st.success?
         pod_data = JSON.parse(out)
         interpret_json_data(pod_data)
       else # reset
         @status = @phase = nil
-        @ready = false
+        @ready = @found = false
         @containers = []
       end
       display_logs if unmanaged? && deploy_succeeded?
     end
 
     def interpret_json_data(pod_data)
+      @found = true
       @phase = (pod_data["metadata"]["deletionTimestamp"] ? "Terminating" : pod_data["status"]["phase"])
       @containers = pod_data["spec"]["containers"].map { |c| c["name"] }
 
@@ -63,18 +64,16 @@ module KubernetesDeploy
     end
 
     def exists?
-      unmanaged? ? @found : true
+      @found
     end
 
     def get_logs
       return {} unless exists? && @containers.present?
-
       @containers.each_with_object({}) do |container_name, container_logs|
         out, _err, _st = kubectl.run(
           "logs",
           @name,
           "--timestamps=true",
-          "--since-time=#{@deploy_started.to_datetime.rfc3339}"
         )
         container_logs[container_name] = out
       end
