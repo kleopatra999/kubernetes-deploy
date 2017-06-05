@@ -31,22 +31,13 @@ module KubernetesDeploy
     end
 
     def fetch_events
-      own_events = super
-      return own_events unless @latest_rs.present?
-      own_events.merge(@latest_rs.fetch_events)
+      return {} unless @latest_rs.present?
+      @latest_rs.fetch_events
     end
 
     def fetch_logs
-      return {} unless container_names.present?
-      container_names.each_with_object({}) do |container_name, container_logs|
-        out, _err, _st = kubectl.run(
-          "logs",
-          id,
-          "--container=#{container_name}",
-          "--since-time=#{@deploy_started.to_datetime.rfc3339}"
-        )
-        container_logs["#{id}/#{container_name}"] = out
-      end
+      return {} unless @latest_rs.present?
+      @latest_rs.fetch_logs
     end
 
     def deploy_succeeded?
@@ -68,10 +59,6 @@ module KubernetesDeploy
     end
 
     private
-
-    def container_names
-      template["spec"]["template"]["spec"]["containers"].map { |c| c["name"] }
-    end
 
     def get_latest_rs(deployment_data)
       label_string = deployment_data["spec"]["selector"]["matchLabels"].map { |k, v| "#{k}=#{v}" }.join(",")
