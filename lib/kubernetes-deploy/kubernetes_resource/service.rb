@@ -41,13 +41,14 @@ module KubernetesDeploy
     private
 
     def related_deployment_replicas
-      selector = template["spec"]["selector"].map { |k, v| "#{k}=#{v}" }.join(",")
-      raw_json, _err, st = kubectl.run("get", "deployments", "--selector=#{selector}", "--output=json")
-      return unless st.success?
-      deployments = JSON.parse(raw_json)["items"]
-      return unless deployments.length == 1
-      related_deployment = deployments.first
-      related_deployment["spec"]["replicas"].to_i
+      @related_deployment_replicas ||= begin
+        selector = template["spec"]["selector"].map { |k, v| "#{k}=#{v}" }.join(",")
+        raw_json, _err, st = kubectl.run("get", "deployments", "--selector=#{selector}", "--output=json")
+        return unless st.success?
+        deployments = JSON.parse(raw_json)["items"]
+        return unless deployments.length == 1
+        deployments.first["spec"]["replicas"].to_i
+      end
     end
   end
 end

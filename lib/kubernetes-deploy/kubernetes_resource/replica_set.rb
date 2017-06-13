@@ -73,7 +73,6 @@ module KubernetesDeploy
     end
 
     def fetch_logs
-      return {} unless container_names.present?
       container_names.each_with_object({}) do |container_name, container_logs|
         out, _err, _st = kubectl.run(
           "logs",
@@ -93,12 +92,8 @@ module KubernetesDeploy
     end
 
     def container_names
-      return template["spec"]["template"]["spec"]["containers"].map { |c| c["name"] } if template
-
-      raw_json, _err, st = kubectl.run("get", type, @name, "--output=json")
-      return unless st.success?
-      live_template = JSON.parse(raw_json)
-      live_template["spec"]["template"]["spec"]["containers"].map { |c| c["name"] }
+      return [] unless template
+      template["spec"]["template"]["spec"]["containers"].map { |c| c["name"] }
     end
 
     def get_pods(rs_data)
