@@ -68,7 +68,7 @@ module KubernetesDeploy
           "--since-time=#{@deploy_started.to_datetime.rfc3339}",
           "--tail=#{LOG_LINE_COUNT}"
         )
-        container_logs["#{id}/#{container_name}"] = out
+        container_logs[container_name] = out.split("\n")
       end
     end
 
