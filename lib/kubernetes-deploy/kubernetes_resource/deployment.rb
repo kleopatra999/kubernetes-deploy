@@ -17,12 +17,11 @@ module KubernetesDeploy
           name: latest_rs_data["metadata"]["name"],
           namespace: namespace,
           context: context,
-          file: nil,
           parent: "#{@name.capitalize} deployment",
-          logger: @logger
+          logger: @logger,
+          deploy_started: @deploy_started
         )
-        @latest_rs.interpret_json_data(latest_rs_data)
-        @latest_rs.deploy_started = @deploy_started
+        @latest_rs.sync(latest_rs_data)
 
         @rollout_data.merge!(deployment_data["status"]
           .slice("replicas", "updatedReplicas", "availableReplicas", "unavailableReplicas"))

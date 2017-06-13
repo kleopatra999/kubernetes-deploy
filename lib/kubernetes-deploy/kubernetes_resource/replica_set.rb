@@ -3,50 +3,33 @@ module KubernetesDeploy
   class ReplicaSet < KubernetesResource
     TIMEOUT = 5.minutes
 
-    def initialize(name:, namespace:, context:, file:, parent: nil, logger:)
+    def initialize(name:, namespace:, context:, file: nil, parent: nil, logger:, deploy_started: nil)
       @name = name
       @namespace = namespace
       @context = context
       @file = file
       @parent = parent
       @logger = logger
+      @deploy_started = deploy_started
       @pods = []
       @rollout_data = { "replicas" => 0 }
     end
 
-    def sync
-      raw_json, _err, st = kubectl.run("get", type, @name, "--output=json")
+    def sync(rs_data = nil)
+      if rs_data.blank?
+        raw_json, _err, st = kubectl.run("get", type, @name, "--output=json")
+        rs_data = JSON.parse(raw_json) if st.success?
+      end
 
-      if @found = st.success?
-        rs_data = JSON.parse(raw_json)
+      if rs_data.present?
+        @found = true
         interpret_json_data(rs_data)
       else # reset
+        @found = false
         @rollout_data = { "replicas" => 0 }
         @status = nil
         @pods = []
       end
-    end
-
-    def interpret_json_data(rs_data)
-      pods_data = get_pods(rs_data)
-
-      pods_data.each do |pod_data|
-        pod = Pod.new(
-          name: pod_data["metadata"]["name"],
-          namespace: namespace,
-          context: context,
-          file: nil,
-          parent: "#{@name.capitalize} replica set",
-          logger: @logger
-        )
-        pod.deploy_started = @deploy_started
-        pod.interpret_json_data(pod_data)
-        @pods << pod
-      end
-
-      @rollout_data.merge!(rs_data["status"]
-        .slice("replicas", "availableReplicas", "readyReplicas"))
-      @status = @rollout_data.map { |st, num| "#{num} #{st.chop.pluralize(num)}" }.join(", ")
     end
 
     def deploy_succeeded?
@@ -63,7 +46,7 @@ module KubernetesDeploy
     end
 
     def exists?
-      unmanaged? ? @found : true
+      @found
     end
 
     def fetch_events
@@ -86,6 +69,27 @@ module KubernetesDeploy
     end
 
     private
+
+    def interpret_json_data(rs_data)
+      pods_data = get_pods(rs_data)
+
+      pods_data.each do |pod_data|
+        pod = Pod.new(
+          name: pod_data["metadata"]["name"],
+          namespace: namespace,
+          context: context,
+          parent: "#{@name.capitalize} replica set",
+          logger: @logger,
+          deploy_started: @deploy_started
+        )
+        pod.sync(pod_data)
+        @pods << pod
+      end
+
+      @rollout_data.merge!(rs_data["status"]
+        .slice("replicas", "availableReplicas", "readyReplicas"))
+      @status = @rollout_data.map { |st, num| "#{num} #{st.chop.pluralize(num)}" }.join(", ")
+    end
 
     def unmanaged?
       @parent.blank?

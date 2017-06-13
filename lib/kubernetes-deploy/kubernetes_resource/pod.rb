@@ -4,19 +4,24 @@ module KubernetesDeploy
     TIMEOUT = 10.minutes
     SUSPICIOUS_CONTAINER_STATES = %w(ImagePullBackOff RunContainerError ErrImagePull).freeze
 
-    def initialize(name:, namespace:, context:, file:, parent: nil, logger:)
+    def initialize(name:, namespace:, context:, file: nil, parent: nil, logger:, deploy_started: nil)
       @name = name
       @namespace = namespace
       @context = context
       @file = file
       @parent = parent
+      @deploy_started = deploy_started
       @logger = logger
     end
 
-    def sync
-      raw_json, _err, st = kubectl.run("get", type, @name, "-a", "--output=json")
-      if @found = st.success?
-        pod_data = JSON.parse(raw_json)
+    def sync(pod_data = nil)
+      if pod_data.blank?
+        raw_json, _err, st = kubectl.run("get", type, @name, "-a", "--output=json")
+        pod_data = JSON.parse(raw_json) if st.success?
+      end
+
+      if pod_data.present?
+        @found = true
         interpret_json_data(pod_data)
       else # reset
         @status = @phase = nil
@@ -25,6 +30,44 @@ module KubernetesDeploy
       end
       display_logs if unmanaged? && deploy_succeeded?
     end
+
+    def deploy_succeeded?
+      if unmanaged?
+        @phase == "Succeeded"
+      else
+        @phase == "Running" && @ready
+      end
+    end
+
+    def deploy_failed?
+      @phase == "Failed"
+    end
+
+    def exists?
+      @found
+    end
+
+    # Returns a hash in the following format:
+    # {
+    #   "pod/web-1/app-container" => "giant blob of logs\nas a single string"
+    #   "pod/web-1/nginx-container" => "another giant blob of logs\nas a single string"
+    # }
+    def fetch_logs
+      return {} unless exists? && @containers.present?
+      @containers.each_with_object({}) do |container_name, container_logs|
+        cmd = [
+          "logs",
+          @name,
+          "--container=#{container_name}",
+          "--since-time=#{@deploy_started.to_datetime.rfc3339}",
+        ]
+        cmd << "--tail=#{LOG_LINE_COUNT}" unless unmanaged?
+        out, _err, _st = kubectl.run(*cmd)
+        container_logs["#{id}/#{container_name}"] = out
+      end
+    end
+
+    private
 
     def interpret_json_data(pod_data)
       @phase = (pod_data["metadata"]["deletionTimestamp"] ? "Terminating" : pod_data["status"]["phase"])
@@ -49,44 +92,6 @@ module KubernetesDeploy
         @status = "#{@phase} (Ready: #{@ready})"
       end
     end
-
-    def deploy_succeeded?
-      if unmanaged?
-        @phase == "Succeeded"
-      else
-        @phase == "Running" && @ready
-      end
-    end
-
-    def deploy_failed?
-      @phase == "Failed"
-    end
-
-    def exists?
-      unmanaged? ? @found : true
-    end
-
-    # Returns a hash in the following format:
-    # {
-    #   "pod/web-1/app-container" => "giant blob of logs\nas a single string"
-    #   "pod/web-1/nginx-container" => "another giant blob of logs\nas a single string"
-    # }
-    def fetch_logs
-      return {} unless exists? && @containers.present?
-      @containers.each_with_object({}) do |container_name, container_logs|
-        cmd = [
-          "logs",
-          @name,
-          "--container=#{container_name}",
-          "--since-time=#{@deploy_started.to_datetime.rfc3339}",
-        ]
-        cmd << "--tail=#{LOG_LINE_COUNT}" unless unmanaged?
-        out, _err, _st = kubectl.run(*cmd)
-        container_logs["#{id}/#{container_name}"] = out
-      end
-    end
-
-    private
 
     def unmanaged?
       @parent.blank?
