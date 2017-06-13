@@ -21,8 +21,9 @@ module KubernetesDeploy
     end
 
     def fetch_events
-      return {} unless @latest_rs.present?
-      @latest_rs.fetch_events
+      own_events = super
+      return own_events unless @latest_rs.present?
+      own_events.merge(@latest_rs.fetch_events)
     end
 
     def fetch_logs
