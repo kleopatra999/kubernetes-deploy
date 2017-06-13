@@ -11,8 +11,9 @@ module KubernetesDeploy
       @parent = parent
       @logger = logger
       @deploy_started = deploy_started
-      @pods = []
+
       @rollout_data = { "replicas" => 0 }
+      @pods = []
     end
 
     def sync(rs_data = nil)
@@ -23,7 +24,10 @@ module KubernetesDeploy
 
       if rs_data.present?
         @found = true
-        interpret_json_data(rs_data)
+        @rollout_data = { "replicas" => 0 }.merge!(rs_data["status"]
+          .slice("replicas", "availableReplicas", "readyReplicas"))
+        @status = @rollout_data.map { |state_replicas, num| "#{num} #{state_replicas.chop.pluralize(num)}" }.join(", ")
+        @pods = find_pods(rs_data)
       else # reset
         @found = false
         @rollout_data = { "replicas" => 0 }
@@ -70,27 +74,6 @@ module KubernetesDeploy
 
     private
 
-    def interpret_json_data(rs_data)
-      pods_data = get_pods(rs_data)
-
-      pods_data.each do |pod_data|
-        pod = Pod.new(
-          name: pod_data["metadata"]["name"],
-          namespace: namespace,
-          context: context,
-          parent: "#{@name.capitalize} replica set",
-          logger: @logger,
-          deploy_started: @deploy_started
-        )
-        pod.sync(pod_data)
-        @pods << pod
-      end
-
-      @rollout_data.merge!(rs_data["status"]
-        .slice("replicas", "availableReplicas", "readyReplicas"))
-      @status = @rollout_data.map { |st, num| "#{num} #{st.chop.pluralize(num)}" }.join(", ")
-    end
-
     def unmanaged?
       @parent.blank?
     end
@@ -100,14 +83,23 @@ module KubernetesDeploy
       template["spec"]["template"]["spec"]["containers"].map { |c| c["name"] }
     end
 
-    def get_pods(rs_data)
+    def find_pods(rs_data)
       label_string = rs_data["spec"]["selector"]["matchLabels"].map { |k, v| "#{k}=#{v}" }.join(",")
       raw_json, _err, st = kubectl.run("get", "pods", "-a", "--output=json", "--selector=#{label_string}")
       return [] unless st.success?
 
       all_pods = JSON.parse(raw_json)["items"]
-      all_pods.each_with_object([]) do |pod, relevant_pods|
-        next unless pod["metadata"]["ownerReferences"].any? { |ref| ref["uid"] == rs_data["metadata"]["uid"] }
+      all_pods.each_with_object([]) do |pod_data, relevant_pods|
+        next unless pod_data["metadata"]["ownerReferences"].any? { |ref| ref["uid"] == rs_data["metadata"]["uid"] }
+        pod = Pod.new(
+          name: pod_data["metadata"]["name"],
+          namespace: namespace,
+          context: context,
+          parent: "#{@name.capitalize} replica set",
+          logger: @logger,
+          deploy_started: @deploy_started
+        )
+        pod.sync(pod_data)
         relevant_pods << pod
       end
     end

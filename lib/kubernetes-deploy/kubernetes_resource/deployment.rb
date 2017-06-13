@@ -6,26 +6,17 @@ module KubernetesDeploy
     def sync
       raw_json, _err, st = kubectl.run("get", type, @name, "--output=json")
       @found = st.success?
-      @rollout_data = { "replicas" => 0 }
-      @status = nil
-      @latest_rs = nil
 
       if @found
         deployment_data = JSON.parse(raw_json)
-        latest_rs_data = get_latest_rs(deployment_data)
-        @latest_rs = ReplicaSet.new(
-          name: latest_rs_data["metadata"]["name"],
-          namespace: namespace,
-          context: context,
-          parent: "#{@name.capitalize} deployment",
-          logger: @logger,
-          deploy_started: @deploy_started
-        )
-        @latest_rs.sync(latest_rs_data)
-
-        @rollout_data.merge!(deployment_data["status"]
+        @latest_rs = find_latest_rs(deployment_data)
+        @rollout_data = { "replicas" => 0 }.merge!(deployment_data["status"]
           .slice("replicas", "updatedReplicas", "availableReplicas", "unavailableReplicas"))
         @status = @rollout_data.map { |state_replicas, num| "#{num} #{state_replicas.chop.pluralize(num)}" }.join(", ")
+      else # reset
+        @latest_rs = nil
+        @rollout_data = { "replicas" => 0 }
+        @status = nil
       end
     end
 
@@ -59,7 +50,7 @@ module KubernetesDeploy
 
     private
 
-    def get_latest_rs(deployment_data)
+    def find_latest_rs(deployment_data)
       label_string = deployment_data["spec"]["selector"]["matchLabels"].map { |k, v| "#{k}=#{v}" }.join(",")
       raw_json, _err, st = kubectl.run("get", "replicasets", "--output=json", "--selector=#{label_string}")
       return unless st.success?
@@ -67,10 +58,19 @@ module KubernetesDeploy
       all_rs_data = JSON.parse(raw_json)["items"]
       current_revision = deployment_data["metadata"]["annotations"]["deployment.kubernetes.io/revision"]
 
-      all_rs_data.find do |rs|
+      latest_rs_data = all_rs_data.find do |rs|
         rs["metadata"]["ownerReferences"].any? { |ref| ref["uid"] == deployment_data["metadata"]["uid"] } &&
         rs["metadata"]["annotations"]["deployment.kubernetes.io/revision"] == current_revision
       end
+
+      ReplicaSet.new(
+        name: latest_rs_data["metadata"]["name"],
+        namespace: namespace,
+        context: context,
+        parent: "#{@name.capitalize} deployment",
+        logger: @logger,
+        deploy_started: @deploy_started
+      ).tap { |rs| rs.sync(latest_rs_data) }
     end
   end
 end

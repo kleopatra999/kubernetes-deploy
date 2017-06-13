@@ -196,7 +196,7 @@ module KubernetesDeploy
 
     def template
       if file.present?
-         YAML.load_file(file)
+        YAML.load_file(file)
       else
         raw_json, _err, st = kubectl.run("get", type, @name, "--output=json")
         return unless st.success?

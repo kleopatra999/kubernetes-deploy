@@ -12,6 +12,8 @@ module KubernetesDeploy
       @parent = parent
       @deploy_started = deploy_started
       @logger = logger
+
+      @containers = []
     end
 
     def sync(pod_data = nil)
@@ -22,11 +24,16 @@ module KubernetesDeploy
 
       if pod_data.present?
         @found = true
-        interpret_json_data(pod_data)
+        @containers = pod_data["spec"]["containers"].map { |c| c["name"] }
+        interpret_pod_status_data(pod_data["status"], pod_data["metadata"]) # sets @phase, @status and @ready
+        if @deploy_started
+          log_suspicious_states(pod_data["status"].fetch("containerStatuses", []))
+        end
       else # reset
-        @status = @phase = nil
-        @ready = @found = false
+        @found = false
         @containers = []
+        @phase = @status = nil
+        @ready = false
       end
       display_logs if unmanaged? && deploy_succeeded?
     end
@@ -69,27 +76,24 @@ module KubernetesDeploy
 
     private
 
-    def interpret_json_data(pod_data)
-      @phase = (pod_data["metadata"]["deletionTimestamp"] ? "Terminating" : pod_data["status"]["phase"])
-      @containers = pod_data["spec"]["containers"].map { |c| c["name"] }
+    def interpret_pod_status_data(status_data, metadata)
+      @status = @phase = (metadata["deletionTimestamp"] ? "Terminating" : status_data["phase"])
 
-      if @deploy_started && pod_data["status"]["containerStatuses"]
-        pod_data["status"]["containerStatuses"].each do |status|
-          waiting_state = status["state"]["waiting"] if status["state"]
-          reason = waiting_state["reason"] if waiting_state
-          next unless SUSPICIOUS_CONTAINER_STATES.include?(reason)
-          @logger.warn("#{id} has container in state #{reason} (#{waiting_state['message']})")
-        end
-      end
-
-      if @phase == "Failed"
-        @status = "#{@phase} (Reason: #{pod_data['status']['reason']})"
-      elsif @phase == "Terminating"
-        @status = @phase
-      else
-        ready_condition = pod_data["status"].fetch("conditions", []).find { |condition| condition["type"] == "Ready" }
+      if @phase == "Failed" && status_data['reason'].present?
+        @status += " (Reason: #{status_data['reason']})"
+      elsif @phase != "Terminating"
+        ready_condition = status_data.fetch("conditions", []).find { |condition| condition["type"] == "Ready" }
         @ready = ready_condition.present? && (ready_condition["status"] == "True")
-        @status = "#{@phase} (Ready: #{@ready})"
+        @status += " (Ready: #{@ready})"
+      end
+    end
+
+    def log_suspicious_states(container_statuses)
+      container_statuses.each do |status|
+        waiting_state = status["state"]["waiting"] if status["state"]
+        reason = waiting_state["reason"] if waiting_state
+        next unless SUSPICIOUS_CONTAINER_STATES.include?(reason)
+        @logger.warn("#{id} has container in state #{reason} (#{waiting_state['message']})")
       end
     end
 
