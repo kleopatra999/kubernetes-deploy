@@ -16,8 +16,8 @@ module KubernetesDeploy
     end
 
     def deploy_succeeded?
-      if related_deployment_replicas
-        @num_endpoints == related_deployment_replicas
+      if exposes_zero_replica_deployment?
+       @num_endpoints == 0
       else
         @num_endpoints > 0
       end
@@ -39,6 +39,10 @@ module KubernetesDeploy
     end
 
     private
+
+    def exposes_zero_replica_deployment?
+      related_deployment_replicas && related_deployment_replicas == 0
+    end
 
     def related_deployment_replicas
       @related_deployment_replicas ||= begin
