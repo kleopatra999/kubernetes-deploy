@@ -196,12 +196,14 @@ module KubernetesDeploy
     end
 
     def template
-      if file.present?
-        YAML.load_file(file)
-      else
-        raw_json, _err, st = kubectl.run("get", type, @name, "--output=json")
-        return unless st.success?
-        JSON.parse(raw_json)
+      @template ||= begin
+        if file.present?
+          YAML.load_file(file)
+        else
+          raw_json, _err, st = kubectl.run("get", type, @name, "--output=json")
+          return unless st.success?
+          JSON.parse(raw_json)
+        end
       end
     end
   end

@@ -10,7 +10,7 @@ module KubernetesDeploy
       if @found
         deployment_data = JSON.parse(raw_json)
         @latest_rs = find_latest_rs(deployment_data)
-        @rollout_data = { "replicas" => 0 }.merge!(deployment_data["status"]
+        @rollout_data = { "replicas" => 0 }.merge(deployment_data["status"]
           .slice("replicas", "updatedReplicas", "availableReplicas", "unavailableReplicas"))
         @status = @rollout_data.map { |state_replicas, num| "#{num} #{state_replicas.chop.pluralize(num)}" }.join(", ")
       else # reset
@@ -64,14 +64,16 @@ module KubernetesDeploy
         rs["metadata"]["annotations"]["deployment.kubernetes.io/revision"] == current_revision
       end
 
-      ReplicaSet.new(
+      rs = ReplicaSet.new(
         name: latest_rs_data["metadata"]["name"],
         namespace: namespace,
         context: context,
         parent: "#{@name.capitalize} deployment",
         logger: @logger,
         deploy_started: @deploy_started
-      ).tap { |rs| rs.sync(latest_rs_data) }
+      )
+      rs.sync(latest_rs_data)
+      rs
     end
   end
 end

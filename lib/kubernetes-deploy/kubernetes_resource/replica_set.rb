@@ -24,7 +24,7 @@ module KubernetesDeploy
 
       if rs_data.present?
         @found = true
-        @rollout_data = { "replicas" => 0 }.merge!(rs_data["status"]
+        @rollout_data = { "replicas" => 0 }.merge(rs_data["status"]
           .slice("replicas", "availableReplicas", "readyReplicas"))
         @status = @rollout_data.map { |state_replicas, num| "#{num} #{state_replicas.chop.pluralize(num)}" }.join(", ")
         @pods = find_pods(rs_data)
