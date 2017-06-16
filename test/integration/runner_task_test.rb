@@ -72,7 +72,7 @@ class RunnerTaskTest < KubernetesDeploy::IntegrationTest
     assert task_runner.run(
       task_template: 'hello-cloud-template-runner',
       entrypoint: nil,
-      args: %w(rake some_task)
+      args: %w(rake some_task),
       env_vars: ['ENV=VAR1']
     )
 
